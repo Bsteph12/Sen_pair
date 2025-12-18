@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Session Generator</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .animate-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    import React, { useState, useEffect } from 'react';
+import { Smartphone, Copy, Check, Zap, Shield, AlertCircle, Loader2, Download } from 'lucide-react';
+
+const SessionGenerator = () => {
+  const [step, setStep] = useState('input'); // input, pairing, success
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [pairingCode, setPairingCode] = useState('');
+  const [sessionId, setSessionId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  // Simuler la génération de session
+  const generateSession = async () => {
+    if (!phoneNumber || phoneNumber.length < 8) {
+      setError('Veuillez entrer un numéro valide');
+      return;
+    }
+
+    setError('');
+    setLoading(true);
+
+    try {
+      // Appel à l'API backend
+      const response = await fetch('/api/generate-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber: phoneNumber.replace(/[^0-9]/g, '') })
+      });
+
+      const data = await response.json();
+
+      if (data.pairingCode) {
+        setPairingCode(data.pairingCode);
+        setStep('pairing');
+        
+        // Polling pour vérifier si la session est créée
+        pollForSession(data.sessionToken);
+      } else {
+        throw new Error('Erreur lors de la génération du code');
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Polling pour attendre la connexion
+  const pollForSession = async (token) => {
+    const maxAttempts = 60; // 60 secondes
+    let attempts = 0;
+
+    const interval = setInterval(async () => {
+      attempts++;
+
+      try {
+        const response = await fetch(`/api/check-session/${token}`);
+        const data = await response.json();
+
+        if (data.sessionId) {
+          setSessionId(data.sessionId);
+          setStep('success');
+          clearInterval(interval);
+        }
+
+        if (attempts >= maxAttempts) {
+          setError('Le code a expiré. Veuillez réessayer.');
+          clearInterval(interval);
+          setStep('input');
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+      }
+    }, 1000);
+  };
+
+  const copySessionId = () => {
+    navigator.clipboard.writeText(sessionId);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const downloadSessionId = () => {
+    const element = document.createElement('a');
+    const file = new Blob([sessionId], { type: 'text/plain' });
+    element.href = URL.createObjectURL(file);
+    element.download = 'session-id.txt';
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
+
+  const reset = () => {
+    setStep('input');
+    setPhoneNumber('');
+    setPairingCode('');
+    setSessionId('');
+    setError('');
+    setCopied(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
+      {/* Background Effects */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(14,165,233,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(14,165,233,0.03)_1px,transparent_1px)] bg-[size:50px_50px]" />
+      <div className="absolute top-20 left-10 w-72 h-72 bg-cyan-500/10 rounded-full blur-3xl animate-pulse" />
+      <div className="absolute bottom-20 right-10 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}} />
+
+      <div className="relative z-10 w-full max-w-md">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-cyan-400 to-blue-600 rounded-2xl mb-4 mx-auto">
+            <Smartphone className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-600 bg-clip-text text-transparent mb-2">
+            Session Generator
+          </h1>
+          <p className="text-slate-400">Générez votre Session ID WhatsApp</p>
+        </div>
+
+        {/* Card */}
+        <div className="bg-slate-800/50 backdrop-blur-xl border border-slate-700 rounded-2xl p-8 shadow-2xl">
+          
+          {/* Step 1: Input Phone Number */}
+          {step === 'input' && (
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Numéro de téléphone WhatsApp
+                </label>
+                <input
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="237xxxxxxxxx"
+                  className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 outline-none transition-all"
+                />
+                <p className="text-xs text-slate-500 mt-2">
+                  Entrez votre numéro avec l'indicatif pays (sans le +)
+                </p>
+              </div>
+
+              {error && (
+                <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm">
+                  <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <button
+                onClick={generateSession}
+                disabled={loading}
+                className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-cyan-500/50 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Génération...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-5 h-5" />
+                    Générer Session ID
+                  </>
+                )}
+              </button>
+
+              {/* Info Cards */}
+              <div className="grid grid-cols-2 gap-3 pt-4">
+                <div className="p-3 bg-slate-900/50 border border-slate-700 rounded-lg">
+                  <div className="flex items-center gap-2 text-cyan-400 mb-1">
+                    <Zap className="w-4 h-4" />
+                    <span className="text-xs font-medium">Rapide</span>
+                  </div>
+                  <p className="text-xs text-slate-400">30 secondes</p>
+                </div>
+                <div className="p-3 bg-slate-900/50 border border-slate-700 rounded-lg">
+                  <div className="flex items-center gap-2 text-cyan-400 mb-1">
+                    <Shield className="w-4 h-4" />
+                    <span className="text-xs font-medium">Sécurisé</span>
+                  </div>
+                  <p className="text-xs text-slate-400">Chiffré</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Pairing Code */}
+          {step === 'pairing' && (
+            <div className="space-y-6 text-center">
+              <div className="animate-pulse">
+                <Smartphone className="w-16 h-16 text-cyan-400 mx-auto mb-4" />
+              </div>
+
+              <div>
+                <h3 className="text-xl font-semibold text-white mb-2">
+                  Code de Pairage
+                </h3>
+                <p className="text-slate-400 text-sm mb-6">
+                  Entrez ce code dans WhatsApp → Appareils connectés
+                </p>
+              </div>
+
+              <div className="p-6 bg-slate-900/50 border-2 border-dashed border-cyan-500 rounded-xl">
+                <div className="text-4xl font-bold text-cyan-400 tracking-wider">
+                  {pairingCode}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 text-sm text-slate-400">
+                <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse" />
+                <span>En attente de connexion...</span>
+              </div>
+
+              <p className="text-xs text-slate-500">
+                Le code expire dans 60 secondes
+              </p>
+            </div>
+          )}
+
+          {/* Step 3: Success with Session ID */}
+          {step === 'success' && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 bg-green-500/20 rounded-full mb-4">
+                  <Check className="w-8 h-8 text-green-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-2">
+                  Session ID Générée !
+                </h3>
+                <p className="text-slate-400 text-sm">
+                  Copiez ce Session ID dans votre fichier .env
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">
+                  Votre Session ID
+                </label>
+                <div className="relative">
+                  <textarea
+                    value={sessionId}
+                    readOnly
+                    rows={6}
+                    className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-xl text-white text-sm font-mono resize-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={copySessionId}
+                  className="flex items-center justify-center gap-2 py-3 bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 rounded-xl font-medium hover:bg-cyan-500/30 transition-all"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Copié !
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      Copier
+                    </>
+                  )}
+                </button>
+                <button
+                  onClick={downloadSessionId}
+                  className="flex items-center justify-center gap-2 py-3 bg-slate-700/50 border border-slate-600 text-slate-300 rounded-xl font-medium hover:bg-slate-700 transition-all"
+                >
+                  <Download className="w-4 h-4" />
+                  Télécharger
+                </button>
+              </div>
+
+              <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
+                <p className="text-sm text-blue-300 font-medium mb-2">
+                  📝 Comment utiliser ?
+                </p>
+                <ol className="text-xs text-slate-400 space-y-1 list-decimal list-inside">
+                  <li>Copiez le Session ID ci-dessus</li>
+                  <li>Ouvrez votre fichier .env</li>
+                  <li>Ajoutez: SESSION_ID=&quot;votre_session_id&quot;</li>
+                  <li>Démarrez votre bot</li>
+                </ol>
+              </div>
+
+              <button
+                onClick={reset}
+                className="w-full py-3 bg-slate-700/50 border border-slate-600 text-slate-300 rounded-xl font-medium hover:bg-slate-700 transition-all"
+              >
+                Générer une nouvelle session
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="text-center mt-6 text-sm text-slate-500">
+          <p>Sécurisé et confidentiel • Pas de stockage</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default SessionGenerator;
+    <script type="text/babel">
+        // Code React de l'artifact
+    </script>
+</body>
+</html>
